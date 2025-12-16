@@ -1,0 +1,5 @@
+{% include "admin/edit_inline/stacked.html" %}
+
+<script>
+var modemUpgraderSchema = {{ inline_admin_formset.formset.extra_context | default:"null" | safe }}
+</script>
