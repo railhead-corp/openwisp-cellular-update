@@ -131,44 +131,90 @@ class TelitFN990AXX:
         """
         self.operation.log_line("Starting Telit FN990AXX modem firmware upgrade")
         
-        # Step 1: Transfer firmware file to device
-        self.operation.log_line("Transferring firmware file to device...")
+        # Step 1: Verify device connectivity
+        self.operation.log_line("Verifying device connectivity...")
         self.operation.update_progress(5)
+        if not self._verify_connectivity():
+            raise RecoverableModemFailure("Device connectivity check failed")
+        self.operation.update_progress(10)
+        
+        # Step 2: Transfer firmware file to device
+        self.operation.log_line("Transferring firmware file to device...")
         remote_path = self._transfer_firmware(firmware_file)
-        self.operation.update_progress(20)
-        
-        # Step 2: Verify checksum if requested
-        if self._get_option("verify_checksum", True):
-            self.operation.log_line("Verifying firmware checksum...")
-            if not self._verify_checksum(remote_path):
-                raise ModemUpgradeAborted("Firmware checksum verification failed")
-            self.operation.update_progress(25)
-        
-        # Step 3: Check if upgrade is needed
-        self.operation.log_line("Checking current modem firmware version...")
-        if self._check_firmware_version(remote_path):
-            self.operation.log_line("Modem already has the target firmware")
-            raise ModemUpgradeNotNeeded("Firmware already installed")
         self.operation.update_progress(30)
         
-        # Step 4: Execute the upgrade
+        # Step 3: Trigger custom script (for modem preparation)
+        self.operation.log_line("Preparing device for modem upgrade...")
+        try:
+            script_cmd = "/root/script.sh"
+            script_output = self._execute_command(script_cmd, timeout=120)
+            self.operation.log_line(f"Preparation script output: {script_output.strip()}")
+        except Exception as e:
+            error_msg = f"Device preparation failed: {e}"
+            logger.error(error_msg)
+            self.operation.log_line(error_msg)
+            # Clean up transferred file before raising exception
+            self._cleanup_remote_file(remote_path)
+            raise RecoverableModemFailure(error_msg)
+        self.operation.update_progress(40)
+        
+        # Step 4: Check if upgrade is needed (optional)
+        self.operation.log_line("Checking current modem firmware version...")
+        if self._check_firmware_version(remote_path):
+            self._cleanup_remote_file(remote_path)
+            self.operation.log_line("Modem already has the target firmware version")
+            raise ModemUpgradeNotNeeded("Firmware already installed")
+        self.operation.update_progress(50)
+        
+        # Step 5: Execute the upgrade
         self.operation.log_line("Executing modem firmware upgrade...")
-        self._execute_upgrade(remote_path)
+        try:
+            self._execute_upgrade(remote_path)
+        except Exception as e:
+            # Clean up on failure
+            self._cleanup_remote_file(remote_path)
+            raise
+        self.operation.update_progress(85)
+        
+        # Step 6: Clean up firmware file
+        self._cleanup_remote_file(remote_path)
         self.operation.update_progress(90)
         
-        # Step 5: Reboot modem if requested
+        # Step 7: Reboot modem if requested
         if self._get_option("reboot_modem", True):
             self.operation.log_line("Rebooting modem...")
             self._reboot_modem()
-            self.operation.update_progress(95)
+        self.operation.update_progress(95)
         
-        # Step 6: Verify upgrade success
+        # Step 8: Verify upgrade success
         self.operation.log_line("Verifying upgrade completion...")
         if not self._verify_upgrade():
             raise RecoverableModemFailure("Upgrade verification failed")
         
         self.operation.update_progress(100)
         self.operation.log_line("Modem firmware upgrade completed successfully")
+
+    def _verify_connectivity(self):
+        """
+        Verify that we can execute basic commands on the device.
+        
+        Returns:
+            bool: True if device is reachable and responsive
+        """
+        try:
+            result = self._execute_command("echo 'connectivity_check'", timeout=30)
+            return "connectivity_check" in result
+        except Exception as e:
+            logger.error(f"Connectivity check failed: {e}")
+            return False
+    
+    def _cleanup_remote_file(self, remote_path):
+        """Clean up a remote file, ignoring errors"""
+        try:
+            self._execute_command(f"rm -f {remote_path}", timeout=30)
+            self.operation.log_line(f"Cleaned up temporary file: {remote_path}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up {remote_path}: {e}")
 
     def _transfer_firmware(self, firmware_file):
         """
@@ -177,29 +223,121 @@ class TelitFN990AXX:
         Returns:
             str: Remote path where firmware was uploaded
         """
+        import tempfile
+        import os
+        import subprocess
+        
         remote_path = f"/tmp/modem_firmware_{int(time.time())}.bin"
-        timeout = self._get_option("transfer_timeout", 300)
+        timeout = self._get_option("transfer_timeout", 600)
         
         try:
-            # Use the connection's connector to transfer file
-            connector = self.connection.connector_instance
-            
             # Read firmware file content
             firmware_file.seek(0)
             firmware_data = firmware_file.read()
+            file_size_mb = len(firmware_data) / (1024 * 1024)
             
-            # Create remote file and write data
-            # This is a simplified example - actual implementation depends on
-            # the connector's capabilities
-            self.operation.log_line(f"Uploading firmware to {remote_path}")
+            self.operation.log_line(f"Uploading firmware to {remote_path} ({file_size_mb:.2f} MB)")
             
-            # Simulate file transfer (replace with actual SCP/SFTP logic)
-            # For SSH connections, you would use paramiko's SFTPClient
-            # connector.sftp_client.put(firmware_file.name, remote_path)
+            # Write firmware to temporary local file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as tmp_file:
+                tmp_file.write(firmware_data)
+                tmp_file_path = tmp_file.name
             
-            self.operation.log_line(f"Firmware uploaded successfully to {remote_path}")
+            self.operation.log_line(f"Created temporary file: {tmp_file_path}")
+            
+            try:
+                # Get connection details
+                device = self.connection.device
+                credentials = self.connection.credentials
+                host = device.last_ip or device.management_ip
+                
+                # Get credentials from params dictionary
+                cred_params = credentials.params
+                username = cred_params.get('username', 'root')
+                password = cred_params.get('password')
+                key = cred_params.get('key')
+                port = cred_params.get('port', 22)
+                
+                # Build SCP command
+                scp_target = f"{username}@{host}:{remote_path}"
+                scp_cmd = ["scp", "-O", "-P", str(port)]  # -O forces legacy SCP protocol
+                
+                # Handle authentication
+                if key:
+                    # Write SSH key to temporary file
+                    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.key') as key_file:
+                        key_file.write(key)
+                        key_file_path = key_file.name
+                    
+                    # Set proper permissions for key file
+                    os.chmod(key_file_path, 0o600)
+                    scp_cmd.extend(["-i", key_file_path])
+                    self.operation.log_line("Using SSH key authentication")
+                elif password:
+                    # Use sshpass for password authentication
+                    scp_cmd = ["sshpass", "-p", password] + scp_cmd
+                    self.operation.log_line("Using password authentication")
+                else:
+                    raise Exception("No authentication credentials found (neither password nor key)")
+                
+                # Add common SSH options
+                scp_cmd.extend([
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "UserKnownHostsFile=/dev/null",
+                    "-o", f"ConnectTimeout={timeout}",
+                    tmp_file_path,
+                    scp_target
+                ])
+                
+                self.operation.log_line(f"Transferring to {host}:{remote_path}...")
+                self.operation.update_progress(15)
+                
+                # Execute SCP command
+                process = subprocess.Popen(
+                    scp_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                stdout, stderr = process.communicate(timeout=timeout)
+                
+                if process.returncode != 0:
+                    error_msg = stderr.strip() if stderr else f"SCP exited with code {process.returncode}"
+                    raise Exception(f"SCP transfer failed: {error_msg}")
+                
+                self.operation.log_line("SCP transfer completed successfully")
+                self.operation.update_progress(25)
+                
+            finally:
+                # Clean up temporary files
+                try:
+                    os.unlink(tmp_file_path)
+                except:
+                    pass
+                if 'key_file_path' in locals():
+                    try:
+                        os.unlink(key_file_path)
+                    except:
+                        pass
+            
+            # Verify file size on remote device
+            self.operation.log_line("Verifying transferred file...")
+            result = self._execute_command(f"stat -c%s {remote_path} 2>/dev/null || wc -c < {remote_path}", timeout=60)
+            remote_size = int(result.strip())
+            
+            if remote_size != len(firmware_data):
+                raise RecoverableModemFailure(
+                    f"File transfer verification failed: expected {len(firmware_data)} bytes, got {remote_size} bytes"
+                )
+            
+            self.operation.log_line(f"Firmware uploaded and verified: {remote_size} bytes")
             return remote_path
             
+        except subprocess.TimeoutExpired:
+            raise RecoverableModemFailure(f"Firmware transfer timed out after {timeout} seconds")
+        except RecoverableModemFailure:
+            raise
         except Exception as e:
             logger.error(f"Firmware transfer failed: {e}")
             raise RecoverableModemFailure(f"Failed to transfer firmware: {e}")
@@ -320,26 +458,77 @@ class TelitFN990AXX:
             logger.error(f"Upgrade verification failed: {e}")
             return False
 
-    def _execute_command(self, cmd, timeout=60):
+    def _execute_command(self, cmd, timeout=60, raise_on_error=True):
         """
         Execute a shell command on the device via SSH.
         
         Args:
             cmd: Command to execute
             timeout: Command timeout in seconds
+            raise_on_error: Whether to raise exception on non-zero exit code
             
         Returns:
-            str: Command output
+            str: Command output (stdout)
         """
         try:
             connector = self.connection.connector_instance
-            # Use the connector's exec_command method
-            # This is connector-specific - adjust based on actual implementation
-            stdout, stderr, exit_code = connector.exec_command(
-                cmd, timeout=timeout, raise_on_error=True
-            )
-            return stdout
             
+            # Execute the command
+            result = connector.exec_command(cmd, timeout=timeout)
+            
+            # Handle different return formats from SSH connector
+            exit_code = 0
+            stdout = ""
+            stderr = ""
+            
+            if isinstance(result, tuple):
+                if len(result) == 2:
+                    # Check if it's (exit_code, output) or (stdout, stderr)
+                    first, second = result
+                    if isinstance(first, int):
+                        # Format: (exit_code, output)
+                        exit_code, stdout = first, second
+                    else:
+                        # Format: (stdout, stderr) - assume success
+                        stdout, stderr = first, second
+                        exit_code = 0
+                elif len(result) == 3:
+                    # Format: (stdout, stderr, exit_code) or (exit_code, stdout, stderr)
+                    if isinstance(result[0], int):
+                        exit_code, stdout, stderr = result
+                    elif isinstance(result[2], int):
+                        stdout, stderr, exit_code = result
+                    else:
+                        # All strings, assume success
+                        stdout = str(result[0])
+                        exit_code = 0
+                else:
+                    # Unexpected tuple length, use first element as output
+                    stdout = str(result[0]) if result else ""
+                    exit_code = 0
+            elif isinstance(result, str):
+                # Direct string output - assume success
+                stdout = result
+                exit_code = 0
+            else:
+                # Unexpected type, convert to string
+                stdout = str(result) if result is not None else ""
+                exit_code = 0
+            
+            # Log successful execution
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Command executed: {cmd[:100]}... -> exit_code={exit_code}")
+            
+            # Only raise error if exit_code is actually an integer and non-zero
+            if raise_on_error and isinstance(exit_code, int) and exit_code != 0:
+                error_msg = stderr.strip() if stderr else f"Command exited with code {exit_code}"
+                logger.error(f"Command failed: {cmd[:100]}..., exit code: {exit_code}, error: {error_msg}")
+                raise RecoverableModemFailure(f"Command failed: {error_msg}")
+            
+            return stdout if isinstance(stdout, str) else str(stdout)
+            
+        except RecoverableModemFailure:
+            raise
         except Exception as e:
-            logger.error(f"Command execution failed: {cmd}, error: {e}")
-            raise RecoverableModemFailure(f"Command failed: {e}")
+            logger.error(f"Command execution failed: {cmd[:100]}..., error: {e}")
+            raise RecoverableModemFailure(f"Command execution error: {e}")

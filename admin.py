@@ -286,6 +286,13 @@ class ModemBatchUpgradeOperationAdmin(
     fields = [
         "build",
         "status",
+        "created",
+        "modified",
+    ]
+    autocomplete_fields = ["build"]
+    readonly_fields = [
+        "build",
+        "status",
         "completed",
         "success_rate",
         "failed_rate",
@@ -293,14 +300,6 @@ class ModemBatchUpgradeOperationAdmin(
         "readonly_upgrade_options",
         "created",
         "modified",
-    ]
-    autocomplete_fields = ["build"]
-    readonly_fields = [
-        "completed",
-        "success_rate",
-        "failed_rate",
-        "aborted_rate",
-        "readonly_upgrade_options",
     ]
 
     def organization(self, obj):
@@ -311,6 +310,18 @@ class ModemBatchUpgradeOperationAdmin(
     @admin.display(description=_("Completed"))
     def completed(self, obj):
         return obj.progress_report
+
+    @admin.display(description=_("Success Rate"))
+    def success_rate(self, obj):
+        return f"{obj.success_rate}%"
+
+    @admin.display(description=_("Failed Rate"))
+    def failed_rate(self, obj):
+        return f"{obj.failed_rate}%"
+
+    @admin.display(description=_("Aborted Rate"))
+    def aborted_rate(self, obj):
+        return f"{obj.aborted_rate}%"
 
 
 @admin.register(ModemUpgradeOperation)

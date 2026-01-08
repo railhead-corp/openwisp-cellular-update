@@ -449,14 +449,14 @@ class AbstractDeviceModemFirmware(TimeStampedEditableModel):
         """Automatically associate DeviceModemFirmware to registered devices"""
         if not created:
             return
-        modem_model = getattr(instance.device, "modem_model", None)
-        if not modem_model or not instance.device.model:
+        modem_model = getattr(instance, "modem_model", None)
+        if not modem_model or not instance.model:
             return
-        if instance.device.model not in REVERSE_MODEM_IMAGE_MAP:
+        if instance.model not in REVERSE_MODEM_IMAGE_MAP:
             return
 
         transaction.on_commit(
-            partial(create_device_modem_firmware.delay, instance.device.pk)
+            partial(create_device_modem_firmware.delay, instance.pk)
         )
 
     @classmethod
