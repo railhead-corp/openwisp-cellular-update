@@ -24,6 +24,8 @@ TELIT_MODEM_IMAGE_MAP.update(
                     "boards": (
                         "Telit FN990AXX",
                         "FN990AXX",
+                        "FN990A28",  # Telit FN990A28 modem variant
+                        "Default string Default string",  # Default device model
                         "Raspberry Pi 3 Model B Rev 1.2",  # Raspberry Pi 3B with Telit modem
                         "Raspberry Pi 3 Model B",
                         "Raspberry Pi 3B",

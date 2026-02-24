@@ -1,0 +1,37 @@
+/* Styles for modem batch upgrade confirmation page */
+
+.modem-upgrade-confirmation {
+    margin: 20px 0;
+}
+
+.modem-upgrade-confirmation h2 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+    color: #417690;
+}
+
+.modem-upgrade-confirmation ul {
+    margin: 10px 0 20px 20px;
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    background: #f9f9f9;
+}
+
+.modem-upgrade-confirmation ul li {
+    padding: 5px 0;
+}
+
+.modem-upgrade-confirmation .form-row {
+    margin: 20px 0;
+}
+
+.modem-upgrade-confirmation input[type="submit"] {
+    margin-right: 10px;
+}
+
+.modem-upgrade-confirmation .cancel-link {
+    margin-left: 10px;
+}

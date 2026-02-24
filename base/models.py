@@ -512,7 +512,7 @@ class AbstractModemBatchUpgradeOperation(
         verbose_name_plural = _("Modem Mass Upgrade Operations")
 
     def __str__(self):
-        return f"Modem Upgrade of {self.build} on {self.created}"
+        return f"Modem Upgrade of {self.build}"
 
     def update(self):
         """Update batch status based on individual operations"""

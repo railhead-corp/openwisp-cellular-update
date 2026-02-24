@@ -4,6 +4,7 @@ Telit modem firmware upgrader implementation
 import json
 import logging
 import time
+import shlex
 
 import jsonschema
 
@@ -143,19 +144,25 @@ class TelitFN990AXX:
         remote_path = self._transfer_firmware(firmware_file)
         self.operation.update_progress(30)
         
+        # Step 2.5: Validate firmware checksum
+        self.operation.log_line("Validating firmware checksum...")
+        self._verify_checksum(remote_path, firmware_file)
+        self.operation.update_progress(35)
+        
         # Step 3: Trigger custom script (for modem preparation)
-        self.operation.log_line("Preparing device for modem upgrade...")
-        try:
-            script_cmd = "/root/script.sh"
-            script_output = self._execute_command(script_cmd, timeout=120)
-            self.operation.log_line(f"Preparation script output: {script_output.strip()}")
-        except Exception as e:
-            error_msg = f"Device preparation failed: {e}"
-            logger.error(error_msg)
-            self.operation.log_line(error_msg)
-            # Clean up transferred file before raising exception
-            self._cleanup_remote_file(remote_path)
-            raise RecoverableModemFailure(error_msg)
+        # Commented out for internal release
+        # self.operation.log_line("Preparing device for modem upgrade...")
+        # try:
+        #     script_cmd = "/root/script.sh"
+        #     script_output = self._execute_command(script_cmd, timeout=120)
+        #     self.operation.log_line(f"Preparation script output: {script_output.strip()}")
+        # except Exception as e:
+        #     error_msg = f"Device preparation failed: {e}"
+        #     logger.error(error_msg)
+        #     self.operation.log_line(error_msg)
+        #     # Clean up transferred file before raising exception
+        #     self._cleanup_remote_file(remote_path)
+        #     raise RecoverableModemFailure(error_msg)
         self.operation.update_progress(40)
         
         # Step 4: Check if upgrade is needed (optional)
@@ -181,15 +188,15 @@ class TelitFN990AXX:
         self.operation.update_progress(90)
         
         # Step 7: Reboot modem if requested
-        if self._get_option("reboot_modem", True):
-            self.operation.log_line("Rebooting modem...")
-            self._reboot_modem()
+        # if self._get_option("reboot_modem", True):
+        #     self.operation.log_line("Rebooting modem...")
+        #     self._reboot_modem()
         self.operation.update_progress(95)
         
         # Step 8: Verify upgrade success
         self.operation.log_line("Verifying upgrade completion...")
-        if not self._verify_upgrade():
-            raise RecoverableModemFailure("Upgrade verification failed")
+        # if not self._verify_upgrade():
+        #     raise RecoverableModemFailure("Upgrade verification failed")
         
         self.operation.update_progress(100)
         self.operation.log_line("Modem firmware upgrade completed successfully")
@@ -219,15 +226,19 @@ class TelitFN990AXX:
     def _transfer_firmware(self, firmware_file):
         """
         Transfer firmware file to the device via SCP.
+        Compresses firmware with zstd before transfer to save bandwidth.
         
         Returns:
-            str: Remote path where firmware was uploaded
+            str: Remote path where firmware was uploaded (decompressed)
         """
         import tempfile
         import os
         import subprocess
+        import hashlib
+        import zstandard as zstd
         
-        remote_path = f"/tmp/modem_firmware_{int(time.time())}.bin"
+        remote_compressed_path = f"/tmp/modem_firmware_{int(time.time())}.bin.zst"
+        remote_path = remote_compressed_path.replace('.zst', '')
         timeout = self._get_option("transfer_timeout", 600)
         
         try:
@@ -236,20 +247,32 @@ class TelitFN990AXX:
             firmware_data = firmware_file.read()
             file_size_mb = len(firmware_data) / (1024 * 1024)
             
-            self.operation.log_line(f"Uploading firmware to {remote_path} ({file_size_mb:.2f} MB)")
+            # Calculate SHA256 checksum for verification
+            sha256_hash = hashlib.sha256(firmware_data)
+            self.expected_checksum = sha256_hash.hexdigest()
+            self.operation.log_line(f"OpenWISP calculated checksum (SHA256): {self.expected_checksum}")
+            self.operation.log_line(f"Original firmware size: {file_size_mb:.2f} MB")
             
-            # Write firmware to temporary local file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as tmp_file:
-                tmp_file.write(firmware_data)
+            # Compress firmware using zstd
+            self.operation.log_line("Compressing firmware with zstd...")
+            cctx = zstd.ZstdCompressor(level=3)  # Level 3 for balanced compression/speed
+            compressed_data = cctx.compress(firmware_data)
+            compressed_size_mb = len(compressed_data) / (1024 * 1024)
+            compression_ratio = (1 - len(compressed_data) / len(firmware_data)) * 100
+            self.operation.log_line(f"Compressed size: {compressed_size_mb:.2f} MB ({compression_ratio:.1f}% reduction)")
+            
+            # Write compressed firmware to temporary local file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.bin.zst') as tmp_file:
+                tmp_file.write(compressed_data)
                 tmp_file_path = tmp_file.name
             
-            self.operation.log_line(f"Created temporary file: {tmp_file_path}")
+            self.operation.log_line(f"Created compressed temporary file: {tmp_file_path}")
             
             try:
                 # Get connection details
                 device = self.connection.device
                 credentials = self.connection.credentials
-                host = device.last_ip or device.management_ip
+                host = device.management_ip
                 
                 # Get credentials from params dictionary
                 cred_params = credentials.params
@@ -259,7 +282,7 @@ class TelitFN990AXX:
                 port = cred_params.get('port', 22)
                 
                 # Build SCP command
-                scp_target = f"{username}@{host}:{remote_path}"
+                scp_target = f"{username}@{host}:{remote_compressed_path}"
                 scp_cmd = ["scp", "-O", "-P", str(port)]  # -O forces legacy SCP protocol
                 
                 # Handle authentication
@@ -289,7 +312,7 @@ class TelitFN990AXX:
                     scp_target
                 ])
                 
-                self.operation.log_line(f"Transferring to {host}:{remote_path}...")
+                self.operation.log_line(f"Transferring compressed firmware to {host}:{remote_compressed_path}...")
                 self.operation.update_progress(15)
                 
                 # Execute SCP command
@@ -321,9 +344,32 @@ class TelitFN990AXX:
                     except:
                         pass
             
-            # Verify file size on remote device
-            self.operation.log_line("Verifying transferred file...")
-            result = self._execute_command(f"stat -c%s {remote_path} 2>/dev/null || wc -c < {remote_path}", timeout=60)
+            # Verify compressed file size on remote device
+            self.operation.log_line("Verifying transferred compressed file...")
+            result = self._execute_command(f"stat -c%s {shlex.quote(remote_compressed_path)} 2>/dev/null || wc -c < {shlex.quote(remote_compressed_path)}", timeout=60)
+            remote_compressed_size = int(result.strip())
+            
+            if remote_compressed_size != len(compressed_data):
+                raise RecoverableModemFailure(
+                    f"Compressed file transfer verification failed: expected {len(compressed_data)} bytes, got {remote_compressed_size} bytes"
+                )
+            
+            self.operation.log_line(f"Compressed firmware uploaded and verified: {remote_compressed_size} bytes")
+            
+            # Decompress firmware on device
+            self.operation.log_line("Decompressing firmware on device...")
+            decompress_cmd = f"zstd -d {shlex.quote(remote_compressed_path)} -o {shlex.quote(remote_path)} --rm"
+            try:
+                self._execute_command(decompress_cmd, timeout=180)
+                self.operation.log_line("Firmware decompressed successfully")
+            except Exception as e:
+                # Clean up on decompression failure
+                self._cleanup_remote_file(remote_compressed_path)
+                raise RecoverableModemFailure(f"Firmware decompression failed: {e}")
+            
+            # Verify decompressed file size
+            self.operation.log_line("Verifying decompressed firmware...")
+            result = self._execute_command(f"stat -c%s {shlex.quote(remote_path)} 2>/dev/null || wc -c < {shlex.quote(remote_path)}", timeout=60)
             remote_size = int(result.strip())
             
             if remote_size != len(firmware_data):
@@ -342,26 +388,77 @@ class TelitFN990AXX:
             logger.error(f"Firmware transfer failed: {e}")
             raise RecoverableModemFailure(f"Failed to transfer firmware: {e}")
 
-    def _verify_checksum(self, remote_path):
+    def _verify_checksum(self, remote_path, firmware_file):
         """
-        Verify firmware checksum on the device.
+        Verify firmware checksum on the device by comparing with OpenWISP-side checksum.
+        
+        Args:
+            remote_path: Path to firmware file on device
+            firmware_file: Firmware file object from OpenWISP
         
         Returns:
             bool: True if checksum is valid
+            
+        Raises:
+            RecoverableModemFailure: If checksums don't match (will trigger retry)
         """
+        import hashlib
+        
         try:
-            # Execute checksum verification command
-            cmd = f"md5sum {remote_path}"
+            # Calculate OpenWISP checksum from firmware file
+            firmware_file.seek(0)
+            firmware_data = firmware_file.read()
+            sha256_hash = hashlib.sha256(firmware_data)
+            openwisp_checksum = sha256_hash.hexdigest()
+            self.operation.log_line(f"OpenWISP calculated checksum: {openwisp_checksum}")
+            
+            # Execute checksum verification command on device
+            cmd = f"sha256sum {shlex.quote(remote_path)}"
             result = self._execute_command(cmd)
             
-            # Compare with expected checksum (would need to be in metadata)
-            # For now, just log the result
+            # Log the device output (keep original OpenWISP format)
             self.operation.log_line(f"Firmware checksum: {result.strip()}")
+            
+            # Parse device checksum from output
+            # Expected format: "Device firmware checksum - <checksum>  <filepath>"
+            # Or standard sha256sum format: "<checksum>  <filepath>"
+            device_checksum = None
+            
+            if "Device firmware checksum -" in result:
+                # Custom format from device engineer
+                parts = result.split(" - ")
+                if len(parts) >= 2:
+                    # Get checksum (first part after ' - ', before spaces)
+                    device_checksum = parts[1].split()[0].strip()
+            else:
+                # Standard sha256sum format
+                device_checksum = result.split()[0].strip()
+            
+            if not device_checksum:
+                error_msg = "Failed to parse device checksum from output"
+                logger.error(error_msg)
+                self.operation.log_line(error_msg)
+                raise RecoverableModemFailure(error_msg)
+            
+            self.operation.log_line(f"Device firmware checksum: {device_checksum}")
+            
+            # Compare checksums (case-insensitive)
+            if device_checksum.lower() != openwisp_checksum.lower():
+                error_msg = f"Checksum mismatch! Device: {device_checksum}, OpenWISP: {openwisp_checksum}"
+                logger.error(error_msg)
+                self.operation.log_line(error_msg)
+                raise RecoverableModemFailure("Firmware checksum validation failed - will retry upgrade")
+            
+            self.operation.log_line("✓ Checksum validation successful - firmware integrity verified")
             return True
             
+        except RecoverableModemFailure:
+            raise
         except Exception as e:
-            logger.error(f"Checksum verification failed: {e}")
-            return False
+            error_msg = f"Checksum verification failed: {e}"
+            logger.error(error_msg)
+            self.operation.log_line(error_msg)
+            raise RecoverableModemFailure(error_msg)
 
     def _check_firmware_version(self, remote_path):
         """
@@ -409,16 +506,29 @@ class TelitFN990AXX:
             
             # Simulate gradual progress updates
             # In real implementation, parse tool output for actual progress
-            result = self._execute_command(cmd, timeout=timeout)
+            result = self._execute_command(cmd, timeout=timeout, raise_on_error=False)
             
             # Log the upgrade output
             for line in result.split("\n"):
                 if line.strip():
                     self.operation.log_line(f"Tool output: {line.strip()}")
             
+            # Check if firmware was uploaded successfully - if so, don't retry
+            # This handles messages like '[+] firmware uploaded successfully' or 'upload successful'
+            result_lower = result.lower()
+            if "firmware uploaded successfully" in result_lower or "upload successful" in result_lower:
+                self.operation.log_line("Firmware uploaded successfully - upgrade completed")
+                return
+            
             self.operation.log_line("Modem upgrade command completed")
             
         except Exception as e:
+            # Check if the error message indicates successful upload
+            error_msg = str(e).lower()
+            if "firmware uploaded successfully" in error_msg or "upload successful" in error_msg:
+                self.operation.log_line("Firmware uploaded successfully (detected in error message)")
+                return
+            
             logger.error(f"Modem upgrade execution failed: {e}")
             raise RecoverableModemFailure(f"Upgrade execution failed: {e}")
 

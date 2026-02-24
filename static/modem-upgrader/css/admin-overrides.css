@@ -1,0 +1,112 @@
+/* Admin UI Fixes for Modem Upgrader */
+
+/* UI-001: Fix breadcrumb overflow behind user menu */
+.breadcrumbs {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: calc(100% - 220px); /* Reserve space for user menu */
+    display: block;
+}
+
+.breadcrumbs a,
+.breadcrumbs > span {
+    max-width: 300px;
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+}
+
+/* Add tooltip for full breadcrumb text */
+.breadcrumbs > *:last-child {
+    cursor: help;
+}
+
+/* UI-003: Fix message banner clipping by sidebar */
+.messagelist,
+.errornote,
+ul.messagelist {
+    margin-left: 0 !important;
+    box-sizing: border-box;
+    width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+/* Ensure messages appear in content area, not behind sidebar */
+#content-main .messagelist,
+#content .messagelist {
+    margin-left: 0;
+}
+
+.messagelist li {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+}
+
+/* UI-004: Fix form field alignment for upgrade options */
+.form-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 0.5rem 1.5rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+    clear: both;
+}
+
+.form-row > label {
+    text-align: right;
+    padding-top: 0.4rem;
+    font-weight: 600;
+}
+
+.form-row > div,
+.form-row > input[type="text"],
+.form-row > input[type="number"],
+.form-row > select,
+.form-row > textarea {
+    grid-column: 2;
+    width: 100%;
+    max-width: 500px;
+}
+
+.form-row .help,
+.form-row .helptext {
+    grid-column: 2;
+    margin-top: 0.3rem;
+    font-size: 0.875rem;
+    color: #666;
+    line-height: 1.4;
+}
+
+/* Ensure boolean fields (checkboxes) align properly */
+.form-row .vCheckboxLabel {
+    padding-left: 0;
+}
+
+.form-row input[type="checkbox"] {
+    margin-right: 0.5rem;
+}
+
+/* Fix select dropdowns to have consistent width */
+.form-row select {
+    min-width: 200px;
+}
+
+/* Fix nested field containers */
+.form-row > div > input,
+.form-row > div > select {
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Ensure help text appears below the input, not inline */
+.form-row > div {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-row > div .help {
+    margin-top: 0.3rem;
+}

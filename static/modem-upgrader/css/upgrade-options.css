@@ -1,0 +1,9 @@
+/* Modem Firmware Upgrade Options Styling */
+.modem-upgrade-options-field {
+    font-family: monospace;
+    font-size: 14px;
+}
+
+.modem-upgrade-options-field:focus {
+    outline: 2px solid #447e9b;
+}

@@ -273,6 +273,9 @@ class ReadonlyUpgradeOptionsMixin:
 class ModemBatchUpgradeOperationAdmin(
     ReadonlyUpgradeOptionsMixin, ReadOnlyAdmin, BaseAdmin
 ):
+    class Media:
+        js = ('modem-upgrader/js/batch-operation-refresh.js',)
+    
     list_display = ["build", "organization", "status", "created", "modified"]
     list_filter = [
         "build__category__organization",

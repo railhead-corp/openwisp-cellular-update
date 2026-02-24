@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 class ModemUpgraderConfig(AppConfig):
     name = "openwisp_modem_upgrader"
     label = "modem_upgrader"
-    verbose_name = _("Modem Upgrader")
+    verbose_name = _("Modem Upgrader (v1.0.0)")
 
     def ready(self):
         super().ready()
