@@ -27,7 +27,7 @@ RETRY_OPTIONS = getattr(
 )
 
 # Task timeout (30 minutes default for modem upgrades)
-TASK_TIMEOUT = getattr(settings, "OPENWISP_MODEM_UPGRADER_TASK_TIMEOUT", 1800)
+TASK_TIMEOUT = getattr(settings, "OPENWISP_MODEM_UPGRADER_TASK_TIMEOUT", 600)
 
 # API enabled flag
 MODEM_UPGRADER_API = getattr(settings, "OPENWISP_MODEM_UPGRADER_API", True)

@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
@@ -685,7 +686,12 @@ class AbstractModemUpgradeOperation(
             self.log = line
         logger.info(f"# {line}")
         if save:
-            self.save()
+            try:
+                self.save()
+            except Exception:
+                logger.error(
+                    f"Failed to save log for ModemUpgradeOperation {self.pk}"
+                )
 
     def update_progress(self, percent, save=True):
         """Update progress percentage"""
@@ -737,12 +743,26 @@ class AbstractModemUpgradeOperation(
 
         installed = False
         # Prevent multiple upgrade operations for same device
-        qs = (
-            load_model("ModemUpgradeOperation")
-            .objects.filter(device=self.device, status="in-progress")
-            .exclude(pk=self.pk)
+        # Use a staleness threshold to avoid permanently blocking upgrades
+        # if a previous operation crashed without updating its status
+        stale_threshold = timezone.now() - timedelta(
+            seconds=app_settings.TASK_TIMEOUT
         )
-        if qs.count() > 0:
+        ModemUpgradeOperation = load_model("ModemUpgradeOperation")
+        stale_qs = ModemUpgradeOperation.objects.filter(
+            device=self.device,
+            status="in-progress",
+            modified__lt=stale_threshold,
+        ).exclude(pk=self.pk)
+        if stale_qs.exists():
+            logger.warning(
+                f"Marking {stale_qs.count()} stale in-progress operations as failed"
+            )
+            stale_qs.update(status="failed")
+        active_qs = ModemUpgradeOperation.objects.filter(
+            device=self.device, status="in-progress"
+        ).exclude(pk=self.pk)
+        if active_qs.exists():
             message = "Another modem upgrade operation is in progress, aborting..."
             logger.warning(message)
             self.log_line(message, save=False)
