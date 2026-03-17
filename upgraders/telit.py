@@ -1,7 +1,6 @@
 """
 Telit modem firmware upgrader implementation
 """
-import json
 import logging
 import time
 import shlex
@@ -10,8 +9,6 @@ import jsonschema
 
 from ..exceptions import (
     ModemReconnectionFailed,
-    ModemUpgradeAborted,
-    ModemUpgradeNotNeeded,
     ModemUpgradeOptionsException,
     RecoverableModemFailure,
 )
@@ -35,16 +32,20 @@ class TelitFN990AXX:
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-            "tool_path": {
+            "safe_update_path": {
                 "type": "string",
-                "default": "/usr/bin/telit-fwupdate",
-                "description": "Path to the Telit TFL/UXFP tool on the device",
+                "default": "/usr/bin/safe_update.sh",
+                "description": "Path to the safe_update.sh script on the device",
             },
-            "tool_args": {
-                "type": "array",
-                "items": {"type": "string"},
-                "default": [],
-                "description": "Additional arguments to pass to the upgrade tool",
+            "verify_update_path": {
+                "type": "string",
+                "default": "/usr/bin/verify_update.sh",
+                "description": "Path to the verify_update.sh script on the device",
+            },
+            "state_dir": {
+                "type": "string",
+                "default": "/root/modem-update",
+                "description": "State directory for UXFP update scripts",
             },
             "transfer_timeout": {
                 "type": "integer",
@@ -53,29 +54,24 @@ class TelitFN990AXX:
                 "default": 300,
                 "description": "Timeout in seconds for firmware file transfer",
             },
-            "upgrade_timeout": {
+            "reconnect_interval": {
                 "type": "integer",
-                "minimum": 60,
-                "maximum": 7200,
-                "default": 1200,
-                "description": "Timeout in seconds for modem upgrade process",
+                "minimum": 30,
+                "maximum": 600,
+                "default": 120,
+                "description": "Interval in seconds between reconnection attempts",
+            },
+            "reconnect_attempts": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30,
+                "default": 10,
+                "description": "Number of reconnection attempts after update",
             },
             "verify_checksum": {
                 "type": "boolean",
                 "default": True,
                 "description": "Whether to verify firmware checksum before upgrading",
-            },
-            "reboot_modem": {
-                "type": "boolean",
-                "default": True,
-                "description": "Whether to reboot modem after upgrade",
-            },
-            "progress_callback_interval": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 60,
-                "default": 5,
-                "description": "Interval in seconds for progress updates",
             },
         },
         "additionalProperties": True,
@@ -131,75 +127,50 @@ class TelitFN990AXX:
             ModemReconnectionFailed: If reconnection fails after upgrade
         """
         self.operation.log_line("Starting Telit FN990AXX modem firmware upgrade")
-        
+        state_dir = self._get_option("state_dir", "/root/modem-update")
+
         # Step 1: Verify device connectivity
         self.operation.log_line("Verifying device connectivity...")
         self.operation.update_progress(5)
         if not self._verify_connectivity():
             raise RecoverableModemFailure("Device connectivity check failed")
         self.operation.update_progress(10)
-        
+
         # Step 2: Transfer firmware file to device
         self.operation.log_line("Transferring firmware file to device...")
         remote_path = self._transfer_firmware(firmware_file)
         self.operation.update_progress(30)
-        
-        # Step 2.5: Validate firmware checksum
-        self.operation.log_line("Validating firmware checksum...")
-        self._verify_checksum(remote_path, firmware_file)
-        self.operation.update_progress(35)
-        
-        # Step 3: Trigger custom script (for modem preparation)
-        # Commented out for internal release
-        # self.operation.log_line("Preparing device for modem upgrade...")
-        # try:
-        #     script_cmd = "/root/script.sh"
-        #     script_output = self._execute_command(script_cmd, timeout=120)
-        #     self.operation.log_line(f"Preparation script output: {script_output.strip()}")
-        # except Exception as e:
-        #     error_msg = f"Device preparation failed: {e}"
-        #     logger.error(error_msg)
-        #     self.operation.log_line(error_msg)
-        #     # Clean up transferred file before raising exception
-        #     self._cleanup_remote_file(remote_path)
-        #     raise RecoverableModemFailure(error_msg)
-        self.operation.update_progress(40)
-        
-        # Step 4: Check if upgrade is needed (optional)
-        self.operation.log_line("Checking current modem firmware version...")
-        if self._check_firmware_version(remote_path):
-            self._cleanup_remote_file(remote_path)
-            self.operation.log_line("Modem already has the target firmware version")
-            raise ModemUpgradeNotNeeded("Firmware already installed")
-        self.operation.update_progress(50)
-        
-        # Step 5: Execute the upgrade
-        self.operation.log_line("Executing modem firmware upgrade...")
+
         try:
-            self._execute_upgrade(remote_path)
-        except Exception as e:
-            # Clean up on failure
+            # Step 3: Validate firmware checksum
+            self.operation.log_line("Validating firmware checksum...")
+            self._verify_checksum(remote_path, firmware_file)
+            self.operation.update_progress(35)
+
+            # Step 4: Run safe_update.sh (device will disconnect)
+            self.operation.log_line("Running safe_update.sh - device will disconnect...")
+            self._run_safe_update(remote_path, state_dir)
+            self.operation.update_progress(50)
+
+            # Step 5: Reconnect to device after update
+            self.operation.log_line("Waiting for device to come back online...")
+            self._reconnect_after_update()
+            self.operation.update_progress(70)
+
+            # Step 6: Verify update status via verify_update.sh
+            self.operation.log_line("Checking update result...")
+            self._verify_update_status(state_dir)
+            self.operation.update_progress(90)
+
+            # Step 7: Read and log the UXFP log file
+            self._read_uxfp_log(state_dir)
+
+            self.operation.update_progress(100)
+            self.operation.log_line("Modem firmware upgrade completed successfully")
+        except Exception:
+            # Cleanup firmware file from /tmp on failure
             self._cleanup_remote_file(remote_path)
             raise
-        self.operation.update_progress(85)
-        
-        # Step 6: Clean up firmware file
-        self._cleanup_remote_file(remote_path)
-        self.operation.update_progress(90)
-        
-        # Step 7: Reboot modem if requested
-        # if self._get_option("reboot_modem", True):
-        #     self.operation.log_line("Rebooting modem...")
-        #     self._reboot_modem()
-        self.operation.update_progress(95)
-        
-        # Step 8: Verify upgrade success
-        self.operation.log_line("Verifying upgrade completion...")
-        # if not self._verify_upgrade():
-        #     raise RecoverableModemFailure("Upgrade verification failed")
-        
-        self.operation.update_progress(100)
-        self.operation.log_line("Modem firmware upgrade completed successfully")
 
     def _verify_connectivity(self):
         """
@@ -336,12 +307,12 @@ class TelitFN990AXX:
                 # Clean up temporary files
                 try:
                     os.unlink(tmp_file_path)
-                except:
+                except Exception:
                     pass
                 if 'key_file_path' in locals():
                     try:
                         os.unlink(key_file_path)
-                    except:
+                    except Exception:
                         pass
             
             # Verify compressed file size on remote device
@@ -460,113 +431,152 @@ class TelitFN990AXX:
             self.operation.log_line(error_msg)
             raise RecoverableModemFailure(error_msg)
 
-    def _check_firmware_version(self, remote_path):
+    def _run_safe_update(self, remote_path, state_dir):
         """
-        Check if modem already has the target firmware version.
-        
-        Returns:
-            bool: True if firmware is already installed
+        Run safe_update.sh on the device. The device will disconnect
+        during the update process.
         """
-        try:
-            # Query current modem firmware version
-            cmd = "mmcli -m 0 --firmware-list || qmicli -d /dev/cdc-wdm0 --dms-get-firmware-info"
-            current_version = self._execute_command(cmd)
-            
-            self.operation.log_line(f"Current firmware: {current_version.strip()}")
-            
-            # Compare versions (simplified - would need actual version parsing)
-            # For now, always proceed with upgrade
-            return False
-            
-        except Exception as e:
-            logger.warning(f"Could not check firmware version: {e}")
-            return False
-
-    def _execute_upgrade(self, remote_path):
-        """
-        Execute the Telit TFL/UXFP tool to upgrade modem firmware.
-        """
-        tool_path = self._get_option("tool_path", "/usr/bin/telit-fwupdate")
-        tool_args = self._get_option("tool_args", [])
-        timeout = self._get_option("upgrade_timeout", 1200)
-        progress_interval = self._get_option("progress_callback_interval", 5)
-        
-        # Build command
-        cmd_parts = [tool_path, remote_path] + tool_args
-        cmd = " ".join(cmd_parts)
-        
+        safe_update_path = self._get_option(
+            "safe_update_path", "/usr/bin/safe_update.sh"
+        )
+        cmd = f"{safe_update_path} --state-dir {shlex.quote(state_dir)}"
         self.operation.log_line(f"Executing: {cmd}")
-        
+
         try:
-            # Execute upgrade command with progress monitoring
-            # This would need to parse tool output for progress updates
-            start_time = time.time()
-            base_progress = 30  # Start from 30%
-            max_progress = 90   # End at 90%
-            
-            # Simulate gradual progress updates
-            # In real implementation, parse tool output for actual progress
-            result = self._execute_command(cmd, timeout=timeout, raise_on_error=False)
-            
-            # Log the upgrade output
-            for line in result.split("\n"):
+            self._execute_command(cmd, timeout=60, raise_on_error=False)
+        except Exception:
+            # Expected: device disconnects during update, SSH will drop
+            pass
+
+        self.operation.log_line(
+            "safe_update.sh triggered - device is updating and disconnected"
+        )
+
+    def _reconnect_after_update(self):
+        """
+        Try reconnecting to device via SSH after the update.
+        Retries every reconnect_interval seconds for reconnect_attempts times.
+
+        Raises:
+            ModemReconnectionFailed: If all reconnection attempts fail
+        """
+        interval = self._get_option("reconnect_interval", 120)
+        max_attempts = self._get_option("reconnect_attempts", 10)
+
+        for attempt in range(1, max_attempts + 1):
+            self.operation.log_line(
+                f"Reconnection attempt {attempt}/{max_attempts} "
+                f"(waiting {interval}s)..."
+            )
+            time.sleep(interval)
+
+            try:
+                # Close existing connection and reconnect
+                try:
+                    self.connection.disconnect()
+                except Exception:
+                    pass
+                self.connection.connect()
+                if self._verify_connectivity():
+                    self.operation.log_line(
+                        f"Reconnected to device on attempt {attempt}"
+                    )
+                    return
+            except Exception as e:
+                logger.info(
+                    f"Reconnection attempt {attempt} failed: {e}"
+                )
+
+        raise ModemReconnectionFailed(
+            f"Device not responding after {max_attempts} reconnection attempts "
+            f"({max_attempts * interval}s total)"
+        )
+
+    def _verify_update_status(self, state_dir):
+        """
+        Run verify_update.sh to check if the update succeeded or failed.
+        If state is RUNNING, keeps polling every 60 seconds until
+        it becomes SUCCESS or FAILED.
+
+        Raises:
+            RecoverableModemFailure: If update status is FAILED or polling exhausted
+        """
+        verify_path = self._get_option(
+            "verify_update_path", "/usr/bin/verify_update.sh"
+        )
+        cmd = f"{verify_path} status --state-dir {shlex.quote(state_dir)}"
+        poll_interval = 60  # Check every 60 seconds when RUNNING
+        max_polls = 30  # Up to 30 minutes of polling
+
+        for poll in range(1, max_polls + 1):
+            self.operation.log_line(f"Executing: {cmd}")
+            result = self._execute_command(cmd, timeout=60, raise_on_error=False)
+
+            # Log the raw output
+            for line in result.strip().split("\n"):
                 if line.strip():
-                    self.operation.log_line(f"Tool output: {line.strip()}")
-            
-            # Check if firmware was uploaded successfully - if so, don't retry
-            # This handles messages like '[+] firmware uploaded successfully' or 'upload successful'
-            result_lower = result.lower()
-            if "firmware uploaded successfully" in result_lower or "upload successful" in result_lower:
-                self.operation.log_line("Firmware uploaded successfully - upgrade completed")
-                return
-            
-            self.operation.log_line("Modem upgrade command completed")
-            
-        except Exception as e:
-            # Check if the error message indicates successful upload
-            error_msg = str(e).lower()
-            if "firmware uploaded successfully" in error_msg or "upload successful" in error_msg:
-                self.operation.log_line("Firmware uploaded successfully (detected in error message)")
-                return
-            
-            logger.error(f"Modem upgrade execution failed: {e}")
-            raise RecoverableModemFailure(f"Upgrade execution failed: {e}")
+                    self.operation.log_line(f"verify_update: {line.strip()}")
 
-    def _reboot_modem(self):
-        """Reboot the modem after upgrade"""
-        try:
-            # Different commands depending on modem interface
-            cmd = "mmcli -m 0 --reset || qmicli -d /dev/cdc-wdm0 --dms-set-operating-mode=offline && sleep 2 && qmicli -d /dev/cdc-wdm0 --dms-set-operating-mode=online"
-            self._execute_command(cmd)
-            
-            # Wait for modem to come back online
-            time.sleep(10)
-            self.operation.log_line("Modem reboot completed")
-            
-        except Exception as e:
-            logger.warning(f"Modem reboot failed: {e}")
-            # Non-fatal - continue anyway
+            # Parse state from output
+            state = None
+            exit_code = None
+            for line in result.strip().split("\n"):
+                line = line.strip()
+                if line.startswith("state="):
+                    state = line.split("=", 1)[1].strip().upper()
+                elif line.startswith("exit_code="):
+                    exit_code = line.split("=", 1)[1].strip()
 
-    def _verify_upgrade(self):
+            if state == "SUCCESS":
+                self.operation.log_line("Update verified: SUCCESS")
+                return
+
+            if state == "FAILED":
+                error_msg = (
+                    f"Modem firmware update FAILED on device "
+                    f"(exit_code={exit_code})"
+                )
+                self.operation.log_line(error_msg)
+                raise RecoverableModemFailure(error_msg)
+
+            if state == "RUNNING":
+                self.operation.log_line(
+                    f"Update still RUNNING (poll {poll}/{max_polls}), "
+                    f"waiting {poll_interval}s before next check..."
+                )
+                time.sleep(poll_interval)
+                continue
+
+            # Unknown or missing state
+            error_msg = f"Unexpected update state: {state}"
+            self.operation.log_line(error_msg)
+            raise RecoverableModemFailure(error_msg)
+
+        # Exhausted all polling attempts while still RUNNING
+        error_msg = (
+            f"Update still RUNNING after {max_polls} status checks "
+            f"({max_polls * poll_interval}s total)"
+        )
+        self.operation.log_line(error_msg)
+        raise RecoverableModemFailure(error_msg)
+
+    def _read_uxfp_log(self, state_dir):
         """
-        Verify that the upgrade was successful.
-        
-        Returns:
-            bool: True if upgrade was successful
+        Read and log the UXFP log file from the device.
         """
+        log_path = f"{state_dir}/modem.log"
         try:
-            # Query modem status and firmware version
-            cmd = "mmcli -m 0 --firmware-list || qmicli -d /dev/cdc-wdm0 --dms-get-firmware-info"
-            result = self._execute_command(cmd)
-            
-            self.operation.log_line(f"Post-upgrade firmware: {result.strip()}")
-            
-            # In a real implementation, verify the version matches the target
-            return True
-            
+            result = self._execute_command(
+                f"cat {shlex.quote(log_path)}", timeout=30
+            )
+            self.operation.log_line(f"--- UXFP log ({log_path}) ---")
+            for line in result.strip().split("\n"):
+                if line.strip():
+                    self.operation.log_line(line.strip())
+            self.operation.log_line("--- End UXFP log ---")
         except Exception as e:
-            logger.error(f"Upgrade verification failed: {e}")
-            return False
+            logger.warning(f"Could not read UXFP log: {e}")
+            self.operation.log_line(f"Warning: Could not read UXFP log: {e}")
 
     def _execute_command(self, cmd, timeout=60, raise_on_error=True):
         """
@@ -584,7 +594,21 @@ class TelitFN990AXX:
             connector = self.connection.connector_instance
             
             # Execute the command
-            result = connector.exec_command(cmd, timeout=timeout)
+            try:
+                result = connector.exec_command(cmd, timeout=timeout)
+            except Exception as e:
+                # The SSH connector may raise an exception even for commands
+                # that return output (e.g., non-zero exit code with stdout).
+                # When raise_on_error=False, return the error message as output
+                # so callers can parse it.
+                if not raise_on_error:
+                    error_output = str(e)
+                    logger.info(
+                        f"Command returned error (non-fatal): {cmd[:100]}..., "
+                        f"output: {error_output}"
+                    )
+                    return error_output
+                raise
             
             # Handle different return formats from SSH connector
             exit_code = 0

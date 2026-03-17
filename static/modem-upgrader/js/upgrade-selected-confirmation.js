@@ -12,6 +12,19 @@
             console.log('Modem upgrader schema loaded:', modemUpgraderSchema);
         }
 
+        // Intercept upgrade submission to show power-off warning
+        $('input[name="upgrade_all"], input[name="upgrade_related"]').on('click', function(e) {
+            var confirmed = confirm(
+                '⚠️ WARNING: Do NOT power OFF any device until the modem firmware upgrade is complete.\n\n' +
+                'Powering off during upgrade may permanently damage the modem.\n\n' +
+                'Do you want to proceed with the modem firmware upgrade?'
+            );
+            if (!confirmed) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
         // Handle cancel button
         $('.cancel-link').on('click', function(e) {
             e.preventDefault();

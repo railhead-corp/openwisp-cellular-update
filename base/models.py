@@ -253,6 +253,11 @@ class AbstractModemFirmwareImage(TimeStampedEditableModel):
         return MODEM_IMAGE_MAP[self.type]["boards"]
 
     def clean(self):
+        if self.file and self.file.name:
+            if not self.file.name.lower().endswith('.bin'):
+                raise ValidationError(
+                    {"file": _("Only .bin firmware files are allowed.")}
+                )
         self._clean_type()
         try:
             self.boards

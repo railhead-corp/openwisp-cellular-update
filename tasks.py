@@ -17,19 +17,18 @@ logger = logging.getLogger(__name__)
 
 @shared_task(
     bind=True,
-    autoretry_for=(RecoverableModemFailure,),
     soft_time_limit=app_settings.TASK_TIMEOUT,
     **app_settings.RETRY_OPTIONS,
 )
 def upgrade_modem_firmware(self, operation_id):
     """
     Calls the upgrade() method of a ModemUpgradeOperation instance
-    in the background
+    in the background.
+    Device-side scripts handle firmware update retry logic.
     """
     try:
         operation = load_model("ModemUpgradeOperation").objects.get(pk=operation_id)
-        recoverable = self.request.retries < self.max_retries
-        operation.upgrade(recoverable=recoverable)
+        operation.upgrade(recoverable=False)
     except SoftTimeLimitExceeded:
         operation.status = "failed"
         operation.log_line(_("Operation timed out."))

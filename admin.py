@@ -275,6 +275,11 @@ class ModemBatchUpgradeOperationAdmin(
 ):
     class Media:
         js = ('modem-upgrader/js/batch-operation-refresh.js',)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.has_perm(
+            'modem_upgrader.delete_modembatchupgradeoperation'
+        )
     
     list_display = ["build", "organization", "status", "created", "modified"]
     list_filter = [
@@ -331,6 +336,11 @@ class ModemBatchUpgradeOperationAdmin(
 class ModemUpgradeOperationAdmin(
     ReadonlyUpgradeOptionsMixin, ReadOnlyAdmin, BaseAdmin
 ):
+    def has_delete_permission(self, request, obj=None):
+        return request.user.has_perm(
+            'modem_upgrader.delete_modemupgradeoperation'
+        )
+
     list_display = ["device", "image", "status", "progress_percent", "created", "modified"]
     list_filter = ["device__organization", "status"]
     list_select_related = ["device", "image"]

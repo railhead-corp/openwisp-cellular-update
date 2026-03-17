@@ -20,6 +20,9 @@
 
 {% block content %}
   {% if related_count or firmwareless_count %}
+  <div class="help" style="background:#ffc; border:1px solid #dda; padding:10px; margin-bottom:15px; font-weight:bold; color:#a00;">
+    ⚠️ {% trans "WARNING: Do NOT power OFF any device until the modem firmware upgrade is complete. Powering off during upgrade may permanently damage the modem." %}
+  </div>
   <p>{% blocktrans %}Are you sure you want to proceed with this modem batch upgrade operation?{% endblocktrans %}</p>
   {% elif not related_count and not firmwareless_count %}
   <p>{% blocktrans %}No devices to upgrade were found.

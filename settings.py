@@ -20,14 +20,15 @@ MAX_FILE_SIZE = getattr(
 )
 
 # Celery retry options for modem upgrades
+# Device-side scripts handle retry logic, so OpenWISP does not retry.
 RETRY_OPTIONS = getattr(
     settings,
     "OPENWISP_MODEM_UPGRADER_RETRY_OPTIONS",
-    dict(max_retries=4, retry_backoff=60, retry_backoff_max=600, retry_jitter=True),
+    dict(max_retries=0),
 )
 
-# Task timeout (30 minutes default for modem upgrades)
-TASK_TIMEOUT = getattr(settings, "OPENWISP_MODEM_UPGRADER_TASK_TIMEOUT", 600)
+# Task timeout (40 minutes default: transfer + update + reconnection cycle)
+TASK_TIMEOUT = getattr(settings, "OPENWISP_MODEM_UPGRADER_TASK_TIMEOUT", 2400)
 
 # API enabled flag
 MODEM_UPGRADER_API = getattr(settings, "OPENWISP_MODEM_UPGRADER_API", True)

@@ -110,3 +110,66 @@ ul.messagelist {
 .form-row > div .help {
     margin-top: 0.3rem;
 }
+
+/* === Prominent validation error styling for inline forms === */
+
+/* Inline form error list (server-side validation errors) */
+.inline-related .errorlist,
+.inline-group .errorlist,
+#modemfirmwareimage_set-group .errorlist {
+    background: #ffeaea;
+    border: 2px solid #c0392b;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 8px 0;
+    color: #c0392b;
+    font-weight: 700;
+    font-size: 0.95rem;
+    list-style: none;
+}
+
+.inline-related .errorlist li,
+.inline-group .errorlist li,
+#modemfirmwareimage_set-group .errorlist li {
+    padding: 2px 0;
+}
+
+/* Client-side .bin validation error (injected by JS) */
+.bin-validation-error {
+    background: #ffeaea !important;
+    border: 2px solid #c0392b !important;
+    border-radius: 4px;
+    padding: 8px 12px !important;
+    margin: 8px 0 !important;
+    color: #c0392b !important;
+    font-weight: 700;
+    font-size: 0.95rem;
+    list-style: none !important;
+}
+
+/* Highlight the inline row that has an error */
+.inline-related.has_original .errorlist:not(:empty) ~ *,
+.inline-related .form-row.errors {
+    border-left: 4px solid #c0392b;
+    padding-left: 8px;
+}
+
+/* Top-level form errornote (shown at top of form on validation failure) */
+p.errornote {
+    background: #c0392b;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+}
+
+.form-row.errors .errorlist {
+    grid-column: 1 / span 2;
+    width: 100%;
+}
+
+.form-row.errors .flex-container {
+    grid-column: 1 / span 2;
+}

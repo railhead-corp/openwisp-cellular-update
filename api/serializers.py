@@ -46,6 +46,13 @@ class ModemCategoryRelationSerializer(BaseSerializer):
 
 
 class ModemFirmwareImageSerializer(BaseSerializer):
+    def validate_file(self, value):
+        if value and not value.name.lower().endswith('.bin'):
+            raise serializers.ValidationError(
+                _("Only .bin firmware files are allowed.")
+            )
+        return value
+
     def validate(self, data):
         data["build"] = self.context["view"].get_parent_queryset().get()
         return super().validate(data)
