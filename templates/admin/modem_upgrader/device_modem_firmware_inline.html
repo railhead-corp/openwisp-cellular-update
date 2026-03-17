@@ -2,21 +2,19 @@
 
 {% load i18n %}
 
-{% for form in inline_admin_formset %}
-{% if form.original and form.original.installed %}
+{% if inline_admin_formset.formset.firmware_installed %}
 <script>
-(function($) {
-    $(document).ready(function() {
-        var note = '<div class="help" style="padding: 10px; margin: 5px 0; background-color: #ffc; border: 1px solid #dda;">' +
-            '{% filter escapejs %}{% trans "Note: Modem firmware is already installed on this device. Saving without changing the image will not trigger a new upgrade. To trigger a firmware upgrade, delete the existing entry and add a new one." %}{% endfilter %}' +
-            '</div>';
-        $('#devicemodemfirmware_set-group .inline-related:first').prepend(note);
-    });
-})(django.jQuery);
+    (function ($) {
+        $(document).ready(function () {
+            var note = '<div class="help" style="padding: 10px; margin: 5px 0; background-color: #ffc; border: 1px solid #dda;">' +
+                '{% filter escapejs %}{% trans "Note: A modem firmware entry already exists for this device. Saving without changing the image will not trigger a new upgrade. To re-trigger an upgrade, select a different image or delete the existing entry and add a new one." %}{% endfilter %}' +
+                '</div>';
+            $('#devicemodemfirmware_set-group .inline-related:first').prepend(note);
+        });
+    })(django.jQuery);
 </script>
 {% endif %}
-{% endfor %}
 
 <script>
-var modemUpgraderSchema = {{ inline_admin_formset.formset.extra_context | default:"null" | safe }}
+    var modemUpgraderSchema = {{ inline_admin_formset.formset.extra_context | default: "null" | safe }}
 </script>

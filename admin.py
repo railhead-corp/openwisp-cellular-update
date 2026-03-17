@@ -466,14 +466,21 @@ class DeviceModemFirmwareInline(
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj=obj, **kwargs)
+        formset.firmware_installed = False
         if obj:
             try:
                 DeviceConnection = swapper.load_model("connection", "DeviceConnection")
                 schema = get_modem_upgrader_schema_for_device(obj)
                 formset.extra_context = json.dumps(schema, cls=DjangoJSONEncoder)
             except DeviceConnection.DoesNotExist:
-                # We cannot retrieve the schema for upgrade options because this
-                # device does not have any related DeviceConnection object.
+                pass
+            try:
+                device_fw = DeviceModemFirmware.objects.get(device=obj)
+                # Show the note whenever a DeviceModemFirmware record exists,
+                # so admins know saving without changing the image won't
+                # trigger a new upgrade.
+                formset.firmware_installed = True
+            except DeviceModemFirmware.DoesNotExist:
                 pass
         return formset
 

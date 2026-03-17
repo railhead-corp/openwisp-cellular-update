@@ -13,9 +13,11 @@ class OpenWISPAdminSite(AdminSite):
     
     def each_context(self, request):
         """Add custom context variables to admin"""
+        from .version import __version__
+
         context = super().each_context(request)
         # Add build version
-        context['build_version'] = 'v1.0.0'
+        context['build_version'] = __version__
         return context
 
 

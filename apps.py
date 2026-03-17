@@ -1,11 +1,13 @@
 from django.apps import AppConfig
 from django.utils.translation import gettext_lazy as _
 
+from .version import __version__
+
 
 class ModemUpgraderConfig(AppConfig):
     name = "openwisp_modem_upgrader"
     label = "modem_upgrader"
-    verbose_name = _("Modem Upgrader (v1.0.0)")
+    verbose_name = _(f"Modem Upgrader ({__version__})")
 
     def ready(self):
         super().ready()
