@@ -268,7 +268,7 @@ class Migration(migrations.Migration):
                     models.CharField(
                         blank=True,
                         choices=MODEM_IMAGE_TYPE_CHOICES,
-                        help_text="Modem firmware image type: model or manufacturer. Leave blank to attempt automatic detection",
+                        help_text="Modem firmware image type: model or manufacturer.",
                         max_length=128,
                     ),
                 ),

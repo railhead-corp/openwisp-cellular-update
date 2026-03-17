@@ -2,7 +2,7 @@
 {% load i18n admin_modify %}
 
 {% block object-tools-items %}
-{% if upgrade_url %}
+{% if upgrade_url and original %}
     <li>
         <form method="post" action="{% url 'admin:'|add:upgrade_url %}">
             {% csrf_token %}
@@ -14,4 +14,13 @@
     </li>
 {% endif %}
 {{ block.super }}
+{% endblock %}
+
+{% block submit_buttons_bottom %}
+{{ block.super }}
+{% if original and upgrade_url %}
+<div class="submit-row">
+    <a href="{% url 'admin:'|add:upgrade_url %}" class="button">{% trans 'Back' %}</a>
+</div>
+{% endif %}
 {% endblock %}

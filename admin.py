@@ -54,6 +54,13 @@ class ModemCategoryAdmin(BaseVersionAdmin):
     list_select_related = ["organization"]
     search_fields = ["name"]
     ordering = ["-name", "-created"]
+    change_form_template = "admin/modem_upgrader/modemcategory/change_form.html"
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        app_label = self.model._meta.app_label
+        extra_context["changelist_url"] = f"{app_label}_modemcategory_changelist"
+        return super().change_view(request, object_id, form_url, extra_context)
 
 
 @admin.register(ModemFirmwareImage)
@@ -69,6 +76,8 @@ class ModemFirmwareImageAdmin(BaseVersionAdmin):
 class ModemFirmwareImageInline(TimeReadonlyAdminMixin, admin.StackedInline):
     model = ModemFirmwareImage
     extra = 0
+    min_num = 1
+    max_num = 1
 
     class Media:
         extra = "" if getattr(settings, "DEBUG", False) else ".min"
