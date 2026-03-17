@@ -1,7 +1,7 @@
 """Version information for OpenWISP Modem Firmware Upgrader"""
 
-VERSION = (1, 0, 0, "final")
-__version__ = "v1.0.0"
+VERSION = (1, 2, 0, "final")
+__version__ = "v1.2.0"
 
 
 def get_version():

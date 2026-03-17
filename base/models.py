@@ -232,7 +232,6 @@ class AbstractModemFirmwareImage(TimeStampedEditableModel):
         choices=MODEM_IMAGE_TYPE_CHOICES,
         help_text=_(
             "Modem firmware image type: model or manufacturer. "
-            "Leave blank to attempt automatic detection"
         ),
     )
 

@@ -529,6 +529,19 @@ class DeviceModemUpgradeOperationInline(ReadonlyUpgradeOptionsMixin, ModemUpgrad
 # Register inlines with DeviceAdmin
 DeviceAdmin.conditional_inlines += [DeviceModemFirmwareInline, DeviceModemUpgradeOperationInline]
 
+# Remove "Preview configuration" button from DeviceAdmin
+_original_get_extra_context = DeviceAdmin.get_extra_context
+
+
+def _patched_get_extra_context(self, pk=None):
+    ctx = _original_get_extra_context(self, pk)
+    ctx.pop("additional_buttons", None)
+    ctx.pop("download_url", None)
+    return ctx
+
+
+DeviceAdmin.get_extra_context = _patched_get_extra_context
+
 # Register with reversion for versioning support
 reversion.register(model=DeviceModemFirmware, follow=["device"])
 reversion.register(model=ModemUpgradeOperation)

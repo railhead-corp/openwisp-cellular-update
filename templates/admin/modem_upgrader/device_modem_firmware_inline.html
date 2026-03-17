@@ -3,7 +3,7 @@
 {% load i18n %}
 
 {% for form in inline_admin_formset %}
-{% if form.instance.pk and form.instance.installed %}
+{% if form.original and form.original.installed %}
 <script>
 (function($) {
     $(document).ready(function() {
