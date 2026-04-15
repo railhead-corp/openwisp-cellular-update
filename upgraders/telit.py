@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 class TelitFN990AXX:
     """
-    Upgrader for Telit FN990AXX modems using the TFL/UXFP tool.
+    Upgrader for Telit FN990AXX modems using the TFL tool.
     
     This upgrader assumes:
-    - The TFL/UXFP tool is pre-installed on the target device
+    - The TFL tool is pre-installed on the target device
     - SSH connection is available
     - Modem firmware binary can be transferred via SCP
     """
@@ -45,7 +45,7 @@ class TelitFN990AXX:
             "state_dir": {
                 "type": "string",
                 "default": "/root/modem-update",
-                "description": "State directory for UXFP update scripts",
+                "description": "State directory for modem update scripts",
             },
             "transfer_timeout": {
                 "type": "integer",
@@ -162,8 +162,8 @@ class TelitFN990AXX:
             self._verify_update_status(state_dir)
             self.operation.update_progress(90)
 
-            # Step 7: Read and log the UXFP log file
-            self._read_uxfp_log(state_dir)
+            # Step 7: Read and log the modem update log file
+            self._read_modem_update_log(state_dir)
 
             self.operation.update_progress(100)
             self.operation.log_line("Modem firmware upgrade completed successfully")
@@ -560,23 +560,23 @@ class TelitFN990AXX:
         self.operation.log_line(error_msg)
         raise RecoverableModemFailure(error_msg)
 
-    def _read_uxfp_log(self, state_dir):
+    def _read_modem_update_log(self, state_dir):
         """
-        Read and log the UXFP log file from the device.
+        Read and log the modem update log file from the device.
         """
         log_path = f"{state_dir}/modem.log"
         try:
             result = self._execute_command(
                 f"cat {shlex.quote(log_path)}", timeout=30
             )
-            self.operation.log_line(f"--- UXFP log ({log_path}) ---")
+            self.operation.log_line(f"--- Modem update log ({log_path}) ---")
             for line in result.strip().split("\n"):
                 if line.strip():
                     self.operation.log_line(line.strip())
-            self.operation.log_line("--- End UXFP log ---")
+            self.operation.log_line("--- End Modem update log ---")
         except Exception as e:
-            logger.warning(f"Could not read UXFP log: {e}")
-            self.operation.log_line(f"Warning: Could not read UXFP log: {e}")
+            logger.warning(f"Could not read modem update log: {e}")
+            self.operation.log_line(f"Warning: Could not read modem update log: {e}")
 
     def _execute_command(self, cmd, timeout=60, raise_on_error=True):
         """
