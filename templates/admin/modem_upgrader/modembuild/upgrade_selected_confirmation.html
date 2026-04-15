@@ -23,49 +23,70 @@
   <div class="help" style="background:#ffc; border:1px solid #dda; padding:10px; margin-bottom:15px; font-weight:bold; color:#a00;">
     ⚠️ {% trans "WARNING: Do NOT power OFF any device until the modem firmware upgrade is complete. Powering off during upgrade may permanently damage the modem." %}
   </div>
-  <p>{% blocktrans %}Are you sure you want to proceed with this modem batch upgrade operation?{% endblocktrans %}</p>
+  <p>{% blocktrans %}Select the devices you want to include in this modem batch upgrade operation and click <strong>Upgrade selected devices</strong>.{% endblocktrans %}</p>
   {% elif not related_count and not firmwareless_count %}
   <p>{% blocktrans %}No devices to upgrade were found.
      Hint: Maybe they have been all already updated previously.{% endblocktrans %}</p>
   {% endif %}
-  {% if related_count %}
-  <h2>{% trans "Devices related to modem build" %} {{ build }} ({{ related_count }})</h2>
-  <ul>
-      {% for device_fw in related_device_fw %}
-      <li>{{ device_fw.device.name }}</li>
-      {% endfor %}
-  </ul>
-  {% endif %}
-  {% if firmwareless_count %}
-  <h2>{% trans "Devices which the system has never upgraded yet" %} ({{ firmwareless_count }})</h2>
-  <ul>
-      {% for device in firmwareless_devices %}
-      <li>{{ device.name }}</li>
-      {% endfor %}
-  </ul>
-  {% endif %}
 
   <form method="post">{% csrf_token %}
-  <div>
   <input type="hidden" name="{{ action_checkbox_name }}" value="{{ build.pk|unlocalize }}">
   <input type="hidden" name="action" value="upgrade_selected">
+
+  {% if related_count %}
+  <div class="device-selection-group">
+    <h2>
+      {% trans "Devices related to modem build" %} {{ build }} ({{ related_count }})
+      &nbsp;<a href="#" class="select-all-link" data-group="related">{% trans "Select all" %}</a>
+      &nbsp;/&nbsp;<a href="#" class="deselect-all-link" data-group="related">{% trans "Deselect all" %}</a>
+    </h2>
+    <ul class="device-checkbox-list" id="related-devices-list">
+      {% for device_fw in related_device_fw %}
+      <li>
+        <label>
+          <input type="checkbox" name="selected_device_fw_ids" value="{{ device_fw.pk }}" class="device-checkbox related-device-checkbox">
+          {{ device_fw.device.name }}
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if firmwareless_count %}
+  <div class="device-selection-group">
+    <h2>
+      {% trans "Devices which the system has never upgraded yet" %} ({{ firmwareless_count }})
+      &nbsp;<a href="#" class="select-all-link" data-group="firmwareless">{% trans "Select all" %}</a>
+      &nbsp;/&nbsp;<a href="#" class="deselect-all-link" data-group="firmwareless">{% trans "Deselect all" %}</a>
+    </h2>
+    <ul class="device-checkbox-list" id="firmwareless-devices-list">
+      {% for device in firmwareless_devices %}
+      <li>
+        <label>
+          <input type="checkbox" name="selected_firmwareless_device_ids" value="{{ device.pk }}" class="device-checkbox firmwareless-device-checkbox">
+          {{ device.name }}
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   {% if firmwareless_count or related_count %}
   <div>{% if form.errors %}{{ form.errors }} {% endif %}</div>
   <div class="form-row{% if form.errors.upgrade_options %} errors{% endif %}">
     {{ form }}
   </div>
-  <input type="submit" name="upgrade_all" value="{% trans "Upgrade all devices" %}">
-  {% if firmwareless_count and related_count %}
-  <input type="submit" name="upgrade_related" value="{% trans "Upgrade only related devices" %}">
-  {% endif %}
-  {% endif %}
-  {% if related_count or firmwareless_count %}
-  <a href="#" class="button cancel-link">{% trans "Cancel the upgrade" %}</a>
+  <div class="upgrade-actions">
+    <input type="submit" name="upgrade_selected" id="upgrade-selected-btn" value="{% trans "Upgrade selected devices" %}" disabled>
+    <span id="selected-count-info" class="selected-count-info"></span>
+    <a href="#" class="button cancel-link">{% trans "Cancel the upgrade" %}</a>
+  </div>
   {% else %}
   <a href="#" class="button cancel-link">{% trans "Go back" %}</a>
   {% endif %}
 
-  </div>
   </form>
 {% endblock %}
 

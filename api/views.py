@@ -84,11 +84,26 @@ class ModemBuildBatchUpgradeView(ProtectedAPIMixin, generics.GenericAPIView):
 
     def post(self, request, pk):
         """
-        Upgrades all the devices' modems related to the specified build ID.
+        Upgrades the modems of explicitly selected devices related to the specified build ID.
+        Accepts 'selected_device_fw_ids' (list of DeviceModemFirmware PKs) and
+        'selected_firmwareless_device_ids' (list of Device PKs) in the request body.
         """
-        upgrade_all = request.POST.get("upgrade_all") is not None
+        selected_device_fw_ids = request.data.getlist(
+            "selected_device_fw_ids", []
+        )
+        selected_firmwareless_device_ids = request.data.getlist(
+            "selected_firmwareless_device_ids", []
+        )
+        if not selected_device_fw_ids and not selected_firmwareless_device_ids:
+            return Response(
+                {"error": "At least one device must be selected for upgrade."},
+                status=400,
+            )
         instance = self.get_object()
-        batch = instance.batch_upgrade(firmwareless=upgrade_all)
+        batch = instance.batch_upgrade(
+            selected_device_fw_ids=selected_device_fw_ids,
+            selected_firmwareless_device_ids=selected_firmwareless_device_ids,
+        )
         return Response({"batch": str(batch.pk)}, status=201)
 
     def get(self, request, pk):

@@ -162,13 +162,23 @@ class ModemBuildAdmin(BaseAdmin):
                 messages.ERROR,
             )
             return None
-        upgrade_all = request.POST.get("upgrade_all")
-        upgrade_related = request.POST.get("upgrade_related")
+        upgrade_selected = request.POST.get("upgrade_selected")
         upgrade_options = request.POST.get("upgrade_options")
         form = ModemBatchUpgradeConfirmationForm()
         build = queryset.first()
         # upgrade has been confirmed
-        if upgrade_all or upgrade_related:
+        if upgrade_selected:
+            selected_device_fw_ids = request.POST.getlist("selected_device_fw_ids")
+            selected_firmwareless_device_ids = request.POST.getlist(
+                "selected_firmwareless_device_ids"
+            )
+            if not selected_device_fw_ids and not selected_firmwareless_device_ids:
+                self.message_user(
+                    request,
+                    _("Please select at least one device to proceed with the upgrade."),
+                    messages.ERROR,
+                )
+                return None
             form = ModemBatchUpgradeConfirmationForm(
                 data={"upgrade_options": upgrade_options, "build": build}
             )
@@ -176,7 +186,9 @@ class ModemBuildAdmin(BaseAdmin):
             if not form.errors:
                 upgrade_options = form.cleaned_data["upgrade_options"]
                 batch = build.batch_upgrade(
-                    firmwareless=upgrade_all, upgrade_options=upgrade_options
+                    selected_device_fw_ids=selected_device_fw_ids,
+                    selected_firmwareless_device_ids=selected_firmwareless_device_ids,
+                    upgrade_options=upgrade_options,
                 )
                 text = _(
                     "You can track the progress of this modem mass upgrade operation "

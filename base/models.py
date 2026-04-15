@@ -160,7 +160,12 @@ class AbstractModemBuild(TimeStampedEditableModel):
                 }
             )
 
-    def batch_upgrade(self, firmwareless, upgrade_options=None):
+    def batch_upgrade(
+        self,
+        selected_device_fw_ids=None,
+        selected_firmwareless_device_ids=None,
+        upgrade_options=None,
+    ):
         """Initiate a batch upgrade operation for this build"""
         upgrade_options = upgrade_options or {}
         batch = load_model("ModemBatchUpgradeOperation")(
@@ -169,7 +174,12 @@ class AbstractModemBuild(TimeStampedEditableModel):
         batch.full_clean()
         batch.save()
         transaction.on_commit(
-            partial(batch_modem_upgrade_operation.delay, batch.pk, firmwareless)
+            partial(
+                batch_modem_upgrade_operation.delay,
+                batch.pk,
+                selected_device_fw_ids or [],
+                selected_firmwareless_device_ids or [],
+            )
         )
         return batch
 
@@ -531,13 +541,12 @@ class AbstractModemBatchUpgradeOperation(
             self.status = "success"
         self.save()
 
-    def upgrade(self, firmwareless):
-        """Execute the batch upgrade"""
+    def upgrade(self, selected_device_fw_ids, selected_firmwareless_device_ids):
+        """Execute the batch upgrade for the explicitly selected devices"""
         self.status = "in-progress"
         self.save()
-        self.upgrade_related_devices()
-        if firmwareless:
-            self.upgrade_firmwareless_devices()
+        self.upgrade_related_devices(selected_device_fw_ids)
+        self.upgrade_firmwareless_devices(selected_firmwareless_device_ids)
 
     @staticmethod
     def dry_run(build):
@@ -551,9 +560,14 @@ class AbstractModemBatchUpgradeOperation(
             "devices": firmwareless_devices,
         }
 
-    def upgrade_related_devices(self):
-        """Upgrade all devices with existing DeviceModemFirmware"""
-        device_modem_firmwares = self.build._find_related_device_modem_firmwares()
+    def upgrade_related_devices(self, selected_ids):
+        """Upgrade only the DeviceModemFirmware entries specified by selected_ids"""
+        if not selected_ids:
+            return
+        device_modem_firmwares = (
+            self.build._find_related_device_modem_firmwares()
+            .filter(pk__in=selected_ids)
+        )
         for device_fw in device_modem_firmwares:
             image = self.build.modemfirmwareimage_set.filter(
                 type=device_fw.image.type
@@ -563,10 +577,14 @@ class AbstractModemBatchUpgradeOperation(
                 device_fw.full_clean()
                 device_fw.save(self, upgrade_options=self.upgrade_options)
 
-    def upgrade_firmwareless_devices(self):
-        """Upgrade all devices without existing DeviceModemFirmware"""
+    def upgrade_firmwareless_devices(self, selected_ids):
+        """Upgrade only the firmwareless devices whose IDs are in selected_ids"""
+        if not selected_ids:
+            return
         for image in self.build.modemfirmwareimage_set.all():
-            devices = self.build._find_firmwareless_devices(image.boards)
+            devices = self.build._find_firmwareless_devices(image.boards).filter(
+                pk__in=selected_ids
+            )
             for device in devices:
                 DeviceModemFirmware = load_model("DeviceModemFirmware")
                 device_fw = DeviceModemFirmware(device=device, image=image)
