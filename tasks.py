@@ -41,7 +41,11 @@ def upgrade_modem_firmware(self, operation_id):
 
 @shared_task(bind=True, soft_time_limit=app_settings.TASK_TIMEOUT)
 def batch_modem_upgrade_operation(
-    self, batch_id, selected_device_fw_ids, selected_firmwareless_device_ids
+    self,
+    batch_id,
+    firmwareless,
+    selected_device_fw_ids=None,
+    selected_firmwareless_ids=None,
 ):
     """
     Calls the upgrade() method of a ModemBatchUpgradeOperation instance
@@ -52,8 +56,9 @@ def batch_modem_upgrade_operation(
             pk=batch_id
         )
         batch_operation.upgrade(
+            firmwareless=firmwareless,
             selected_device_fw_ids=selected_device_fw_ids,
-            selected_firmwareless_device_ids=selected_firmwareless_device_ids,
+            selected_firmwareless_ids=selected_firmwareless_ids,
         )
     except SoftTimeLimitExceeded:
         batch_operation.status = "failed"
