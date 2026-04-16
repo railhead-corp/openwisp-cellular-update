@@ -162,7 +162,8 @@ class ModemBuildAdmin(BaseAdmin):
                 messages.ERROR,
             )
             return None
-        upgrade_selected = request.POST.get("upgrade_selected")
+        upgrade_all = request.POST.get("upgrade_all")
+        upgrade_related = request.POST.get("upgrade_related")
         upgrade_options = request.POST.get("upgrade_options")
         form = ModemBatchUpgradeConfirmationForm()
         build = queryset.first()
