@@ -1,35 +1,56 @@
-/**
- * JavaScript for modem batch upgrade confirmation page
- */
+"use strict";
 
-(function($) {
-    'use strict';
+django.jQuery(function ($) {
+    // --- helpers ---
 
-    $(document).ready(function() {
-        // Initialize upgrade options widget if present
-        if (typeof modemUpgraderSchema !== 'undefined' && modemUpgraderSchema) {
-            // Schema is available for validation
-            console.log('Modem upgrader schema loaded:', modemUpgraderSchema);
-        }
+    function updateSubmitButton() {
+        // Re-query DOM each time so we always see the live checked state
+        var anyChecked =
+            $("[name='selected_related_fw_ids']:checked").length > 0 ||
+            $("[name='selected_firmwareless_ids']:checked").length > 0;
+        $("#upgrade-selected-btn").prop("disabled", !anyChecked);
+    }
 
-        // Intercept upgrade submission to show power-off warning
-        $('input[name="upgrade_all"], input[name="upgrade_related"]').on('click', function(e) {
-            var confirmed = confirm(
-                '⚠️ WARNING: Do NOT power OFF any device until the modem firmware upgrade is complete.\n\n' +
-                'Powering off during upgrade may permanently damage the modem.\n\n' +
-                'Do you want to proceed with the modem firmware upgrade?'
-            );
-            if (!confirmed) {
-                e.preventDefault();
-                return false;
-            }
-        });
+    function syncSelectAll($toggle) {
+        if (!$toggle.length) { return; }
+        var name = $toggle.data("target");
+        var $boxes = $("[name='" + name + "']");
+        var total = $boxes.length;
+        var checked = $boxes.filter(":checked").length;
+        $toggle[0].indeterminate = (checked > 0 && checked < total);
+        $toggle.prop("checked", checked === total);
+    }
 
-        // Handle cancel button
-        $('.cancel-link').on('click', function(e) {
-            e.preventDefault();
-            window.history.back();
-        });
+    // --- event delegation (survives any DOM manipulation by the admin theme) ---
+
+    // "Select / Deselect all" toggle
+    $(document).on("change", ".select-all-checkbox", function () {
+        var isChecked = $(this).prop("checked");
+        $("[name='" + $(this).data("target") + "']").prop("checked", isChecked);
+        updateSubmitButton();
     });
 
-})(django.jQuery);
+    // Individual device checkbox → sync its section's select-all toggle
+    $(document).on(
+        "change",
+        "[name='selected_related_fw_ids'], [name='selected_firmwareless_ids']",
+        function () {
+            syncSelectAll(
+                $(".select-all-checkbox[data-target='" + $(this).attr("name") + "']")
+            );
+            updateSubmitButton();
+        }
+    );
+
+    // Cancel / go-back link
+    $(document).on("click", ".cancel-link", function (e) {
+        e.preventDefault();
+        window.history.back();
+    });
+
+    // --- initialise states on page load ---
+    updateSubmitButton();
+    $(".select-all-checkbox").each(function () {
+        syncSelectAll($(this));
+    });
+});

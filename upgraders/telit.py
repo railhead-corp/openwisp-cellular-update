@@ -327,6 +327,23 @@ class TelitFN990AXX:
             
             self.operation.log_line(f"Compressed firmware uploaded and verified: {remote_compressed_size} bytes")
             
+            # Check if zstd is available on device before attempting decompression
+            self.operation.log_line("Checking zstd availability on device...")
+            try:
+                self._execute_command("which zstd || command -v zstd", timeout=10)
+                zstd_available = True
+            except Exception:
+                zstd_available = False
+
+            if not zstd_available:
+                # zstd not available on device — clean up compressed file and
+                # fall back to plain SCP transfer
+                self.operation.log_line(
+                    "zstd not available on device; falling back to uncompressed transfer..."
+                )
+                self._cleanup_remote_file(remote_compressed_path)
+                return self._transfer_firmware_plain(firmware_file, firmware_data)
+
             # Decompress firmware on device
             self.operation.log_line("Decompressing firmware on device...")
             decompress_cmd = f"zstd -d {shlex.quote(remote_compressed_path)} -o {shlex.quote(remote_path)} --rm"
@@ -358,6 +375,115 @@ class TelitFN990AXX:
         except Exception as e:
             logger.error(f"Firmware transfer failed: {e}")
             raise RecoverableModemFailure(f"Failed to transfer firmware: {e}")
+
+    def _transfer_firmware_plain(self, firmware_file, firmware_data=None):
+        """
+        Transfer firmware file to the device via plain SCP (no compression).
+        Used as fallback when zstd is not available on the target device.
+
+        Returns:
+            str: Remote path where firmware was uploaded
+        """
+        import tempfile
+        import os
+        import subprocess
+        import hashlib
+
+        remote_path = f"/tmp/modem_firmware_{int(time.time())}.bin"
+        timeout = self._get_option("transfer_timeout", 600)
+
+        if firmware_data is None:
+            firmware_file.seek(0)
+            firmware_data = firmware_file.read()
+
+        file_size_mb = len(firmware_data) / (1024 * 1024)
+        sha256_hash = hashlib.sha256(firmware_data)
+        self.expected_checksum = sha256_hash.hexdigest()
+        self.operation.log_line(f"OpenWISP calculated checksum (SHA256): {self.expected_checksum}")
+        self.operation.log_line(f"Firmware size: {file_size_mb:.2f} MB")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.bin') as tmp_file:
+            tmp_file.write(firmware_data)
+            tmp_file_path = tmp_file.name
+
+        try:
+            device = self.connection.device
+            credentials = self.connection.credentials
+            host = device.management_ip
+            cred_params = credentials.params
+            username = cred_params.get('username', 'root')
+            password = cred_params.get('password')
+            key = cred_params.get('key')
+            port = cred_params.get('port', 22)
+
+            scp_target = f"{username}@{host}:{remote_path}"
+            scp_cmd = ["scp", "-O", "-P", str(port)]
+
+            if key:
+                with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.key') as key_file:
+                    key_file.write(key)
+                    key_file_path = key_file.name
+                os.chmod(key_file_path, 0o600)
+                scp_cmd.extend(["-i", key_file_path])
+                self.operation.log_line("Using SSH key authentication")
+            elif password:
+                scp_cmd = ["sshpass", "-p", password] + scp_cmd
+                self.operation.log_line("Using password authentication")
+            else:
+                raise Exception("No authentication credentials found (neither password nor key)")
+
+            scp_cmd.extend([
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", f"ConnectTimeout={timeout}",
+                tmp_file_path,
+                scp_target,
+            ])
+
+            self.operation.log_line(f"Transferring firmware to {host}:{remote_path}...")
+            self.operation.update_progress(15)
+
+            process = subprocess.Popen(
+                scp_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            stdout, stderr = process.communicate(timeout=timeout)
+
+            if process.returncode != 0:
+                error_msg = stderr.strip() if stderr else f"SCP exited with code {process.returncode}"
+                raise Exception(f"SCP transfer failed: {error_msg}")
+
+            self.operation.log_line("SCP transfer completed successfully")
+            self.operation.update_progress(25)
+
+        finally:
+            try:
+                os.unlink(tmp_file_path)
+            except Exception:
+                pass
+            if 'key_file_path' in locals():
+                try:
+                    os.unlink(key_file_path)
+                except Exception:
+                    pass
+
+        # Verify file size on remote device
+        self.operation.log_line("Verifying transferred firmware...")
+        result = self._execute_command(
+            f"stat -c%s {shlex.quote(remote_path)} 2>/dev/null || wc -c < {shlex.quote(remote_path)}",
+            timeout=60,
+        )
+        remote_size = int(result.strip())
+
+        if remote_size != len(firmware_data):
+            raise RecoverableModemFailure(
+                f"File transfer verification failed: expected {len(firmware_data)} bytes, got {remote_size} bytes"
+            )
+
+        self.operation.log_line(f"Firmware uploaded and verified: {remote_size} bytes")
+        return remote_path
 
     def _verify_checksum(self, remote_path, firmware_file):
         """

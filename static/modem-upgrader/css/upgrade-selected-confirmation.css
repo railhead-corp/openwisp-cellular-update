@@ -1,37 +1,84 @@
 /* Styles for modem batch upgrade confirmation page */
 
-.modem-upgrade-confirmation {
-    margin: 20px 0;
+/* Section header: title + Select/Deselect all control side-by-side */
+.device-selection-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 20px;
+    margin-bottom: 6px;
 }
 
-.modem-upgrade-confirmation h2 {
-    margin-top: 20px;
-    margin-bottom: 10px;
+.device-selection-header h2 {
+    margin: 0;
     font-size: 1.2em;
     color: #417690;
 }
 
-.modem-upgrade-confirmation ul {
-    margin: 10px 0 20px 20px;
+/* "Select / Deselect all" toggle — span wrapper + sibling label */
+.select-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9em;
+    color: #555;
+    white-space: nowrap;
+}
+
+.select-toggle input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.select-toggle label {
+    cursor: pointer;
+    font-weight: normal;
+    margin: 0;
+}
+
+/* Scrollable device list with checkboxes */
+.device-checkbox-list {
+    margin: 0 0 20px 0;
+    padding: 10px 12px;
     max-height: 300px;
     overflow-y: auto;
     border: 1px solid #ddd;
-    padding: 10px;
     background: #f9f9f9;
+    list-style: none;
 }
 
-.modem-upgrade-confirmation ul li {
-    padding: 5px 0;
+.device-checkbox-list li {
+    padding: 4px 0;
 }
 
-.modem-upgrade-confirmation .form-row {
-    margin: 20px 0;
+.device-checkbox-list label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: normal;
 }
 
-.modem-upgrade-confirmation input[type="submit"] {
-    margin-right: 10px;
+.device-checkbox-list input[type="checkbox"] {
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
 }
 
-.modem-upgrade-confirmation .cancel-link {
-    margin-left: 10px;
+/* Submit row */
+.submit-row {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Disabled state for the upgrade button */
+#upgrade-selected-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
