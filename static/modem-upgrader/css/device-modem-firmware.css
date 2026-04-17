@@ -2,18 +2,48 @@
   padding: 15px;
   border-bottom: 1px solid var(--hairline-color);
 }
+
 #id_devicemodemfirmware-0-upgrade_options_jsoneditor label {
   width: unset;
   padding: 0px;
 }
+
 #id_devicemodemfirmware-0-upgrade_options_jsoneditor input[type="checkbox"] {
   position: relative;
   bottom: -1px;
 }
+
 #main #id_devicemodemfirmware-0-upgrade_options_jsoneditor .form-row {
   padding: 5px 0;
   border-bottom: none;
 }
+
 #devicemodemfirmware-group .form-row.field-upgrade_options {
   display: none;
+}
+
+/* Make all upgrade options fields read-only */
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor input,
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor select,
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor textarea {
+  pointer-events: none;
+  background-color: var(--darkened-bg, #f8f8f8);
+  color: var(--body-quiet-color, #666);
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor input[type="checkbox"] {
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* Explicitly disable verify_checksum dropdown */
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor select[id="root[verify_checksum]"],
+#id_devicemodemfirmware-0-upgrade_options_jsoneditor select[name="root[verify_checksum]"] {
+  pointer-events: none;
+  background-color: var(--darkened-bg, #f8f8f8);
+  color: var(--body-quiet-color, #666);
+  cursor: not-allowed;
+  opacity: 0.8;
 }

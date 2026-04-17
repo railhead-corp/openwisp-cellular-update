@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 def get_modem_upgrader_schema_for_device(device):
     """Get the upgrade schema for a device's modem upgrader"""
     upgrader_class = get_modem_upgrader_class_for_device(device)
-    return getattr(upgrader_class, "SCHEMA", None)
+    schema = getattr(upgrader_class, "SCHEMA", None)
+    if schema:
+        # Strip $schema and definitions keys — they cause Ajv errors
+        # in the advanced JSON editor (advanced-mode.js)
+        schema = {k: v for k, v in schema.items() if k not in ("$schema", "definitions")}
+    return schema
 
 
 def get_modem_upgrader_class_for_device(device):

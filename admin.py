@@ -105,16 +105,13 @@ class ModemFirmwareImageInline(TimeReadonlyAdminMixin, admin.StackedInline):
 
 
 class ModemBatchUpgradeConfirmationForm(forms.ModelForm):
-    upgrade_options = forms.JSONField(
-        widget=ModemFirmwareSchemaWidget(), required=False
-    )
     build = forms.ModelChoiceField(
         widget=forms.HiddenInput(), required=False, queryset=ModemBuild.objects.all()
     )
 
     class Meta:
         model = ModemBatchUpgradeOperation
-        fields = ("build", "upgrade_options")
+        fields = ("build",)
 
     @property
     def media(self):
@@ -164,7 +161,6 @@ class ModemBuildAdmin(BaseAdmin):
             return None
         upgrade_all = request.POST.get("upgrade_all")
         upgrade_related = request.POST.get("upgrade_related")
-        upgrade_options = request.POST.get("upgrade_options")
         form = ModemBatchUpgradeConfirmationForm()
         build = queryset.first()
         # upgrade has been confirmed
@@ -176,14 +172,13 @@ class ModemBuildAdmin(BaseAdmin):
                 "selected_firmwareless_ids"
             )
             form = ModemBatchUpgradeConfirmationForm(
-                data={"upgrade_options": upgrade_options, "build": build}
+                data={"build": build}
             )
             form.full_clean()
             if not form.errors:
-                upgrade_options = form.cleaned_data["upgrade_options"]
                 batch = build.batch_upgrade(
                     firmwareless=bool(selected_firmwareless_ids),
-                    upgrade_options=upgrade_options,
+                    upgrade_options={},
                     selected_device_fw_ids=selected_device_fw_ids or None,
                     selected_firmwareless_ids=selected_firmwareless_ids or None,
                 )

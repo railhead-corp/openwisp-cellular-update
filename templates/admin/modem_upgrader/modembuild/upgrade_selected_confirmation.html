@@ -73,7 +73,7 @@ delete-selected-confirmation{% endblock %}
 
   {% if firmwareless_count or related_count %}
   <div>{% if form.errors %}{{ form.errors }}{% endif %}</div>
-  <div class="form-row{% if form.errors.upgrade_options %} errors{% endif %}">{{ form }}</div>
+  {{ form }}
   <div class="submit-row">
     <input type="submit" name="upgrade_all" id="upgrade-selected-btn" value="{% trans " Upgrade selected devices" %}" />
     <a href="#" class="button cancel-link">{% trans "Cancel the upgrade" %}</a>

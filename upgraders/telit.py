@@ -28,24 +28,25 @@ class TelitFN990AXX:
 
     # JSON schema for upgrade options validation
     SCHEMA = {
-        "definitions": {},
-        "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
             "safe_update_path": {
                 "type": "string",
                 "default": "/usr/bin/safe_update.sh",
                 "description": "Path to the safe_update.sh script on the device",
+                "readOnly": True,
             },
             "verify_update_path": {
                 "type": "string",
                 "default": "/usr/bin/verify_update.sh",
                 "description": "Path to the verify_update.sh script on the device",
+                "readOnly": True,
             },
             "state_dir": {
                 "type": "string",
                 "default": "/root/modem-update",
                 "description": "State directory for modem update scripts",
+                "readOnly": True,
             },
             "transfer_timeout": {
                 "type": "integer",
@@ -53,6 +54,7 @@ class TelitFN990AXX:
                 "maximum": 3600,
                 "default": 300,
                 "description": "Timeout in seconds for firmware file transfer",
+                "readOnly": True,
             },
             "reconnect_interval": {
                 "type": "integer",
@@ -60,6 +62,7 @@ class TelitFN990AXX:
                 "maximum": 600,
                 "default": 120,
                 "description": "Interval in seconds between reconnection attempts",
+                "readOnly": True,
             },
             "reconnect_attempts": {
                 "type": "integer",
@@ -67,11 +70,13 @@ class TelitFN990AXX:
                 "maximum": 30,
                 "default": 10,
                 "description": "Number of reconnection attempts after update",
+                "readOnly": True,
             },
             "verify_checksum": {
                 "type": "boolean",
                 "default": True,
                 "description": "Whether to verify firmware checksum before upgrading",
+                "readOnly": True,
             },
         },
         "additionalProperties": True,
