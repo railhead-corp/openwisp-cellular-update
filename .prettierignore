@@ -1,0 +1,4 @@
+# Django templates contain template syntax that Prettier cannot parse correctly
+# (e.g. {{ var|filter:"arg"|safe }}) — formatting these files corrupts them.
+openwisp_modem_upgrader/templates/**
+openwisp_firmware_upgrader/templates/**
