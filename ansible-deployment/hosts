@@ -1,7 +1,0 @@
-[openwisp2]
-# Using SSH key authentication (password auth disabled on server)
-50.234.228.83 ansible_user=cchandanbatwe ansible_ssh_private_key_file=~/.ssh/cchandanbatwe_key ansible_become_password=t2Q-4EnczLXW
-
-[openwisp2:vars]
-ansible_python_interpreter=/usr/bin/python3
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
